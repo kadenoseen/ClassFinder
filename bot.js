@@ -1,4 +1,4 @@
-// Description: This file contains the code for the Discord bot that will be used to manage the class channels
+// Description: This file contains the code for the Discord bot to manage the class channels
 // Author: Kaden
 
 // Import necessary modules
@@ -23,7 +23,9 @@ const client = new Discord.Client({
 // Defines reaction message to add classes
 let addClassesReactionMessage;
 
-// When the bot is ready, log a message to the console and cache the addClassesReactionMessage
+/**
+ * Event listener for when the discord bot successfully logs in and is ready
+ */
 client.on('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
     // get the server by its ID
@@ -34,14 +36,22 @@ client.on('ready', async () => {
     addClassesReactionMessage = await chan.messages.fetch('1064610530154778795');
 });
 
-// Listens for new members joining the server
+
+/**
+ * Event listener for when a new member joins the discord server
+ * @param {Discord.GuildMember} member - The new member that joined
+ */
 client.on('guildMemberAdd', async member => {
     //add classes to the member
     await helpers.addClasses(member);
 });
 
 
-// Listens for reactions added to messages
+/**
+ * Event listener for when a reaction is added to a message in the discord server
+ * @param {Discord.MessageReaction} reaction - The reaction that was added
+ * @param {Discord.User} user - The user who added the reaction
+ */
 client.on("messageReactionAdd", async (reaction, user) => {
     // Check if the reaction was added to a message in the "add-classes" channel message
     if (reaction.message === addClassesReactionMessage) {
@@ -55,7 +65,10 @@ client.on("messageReactionAdd", async (reaction, user) => {
 });
 
 
-// Listens for messages sent in the server
+/**
+ * Event listener for when a message is created in the discord server
+ * @param {Discord.Message} message - The message that was created
+ */
 client.on("messageCreate", async (message) => {
     // Check if the message is the leave command
     if(message.content === "/leave"){
@@ -70,8 +83,14 @@ client.on("messageCreate", async (message) => {
             message.channel.permissionOverwrites.set([{id: message.author.id, deny: ['ViewChannel', 'SendMessages']}]);
         }
     }
+    else if(message.content.startsWith("/essay")){
+        const content = message.content.slice(7); // Extract the content after "/essay"
+        const output = await helpers.writeEssay(content); // Call the essay function with the content
+        helpers.sendLongMessage(message.channel, output); // Send the output to the channel
+
+    }
 });
 
-  
+
 // Logs in the bot
 client.login(process.env.BOT_API);

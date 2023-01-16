@@ -1,10 +1,15 @@
-// Description: This file contain the helper code for the Discord bot that will be used to manage the class channels
+// Description: This file contain the helper code for the Discord bot to manage the class channels
 // Author: Kaden
 
 // Import necessary modules
 const Discord = require('discord.js');
 
-// Adds classes for new or existing member
+
+/**
+ * Add the member to channels that are specific to the classes they are in
+ * @param {Discord.GuildMember} member - The member to add to the classes
+ * @param {boolean} newUser - true if this is the first time the member is joining the server, false otherwise
+ */
 async function addClasses(member, newUser) {
     // message filter function
     const filter = m => m.author.id === member.id;
@@ -105,7 +110,12 @@ async function addClasses(member, newUser) {
     })
 }
 
-// Formats class channel name
+
+/**
+ * Formats the given input to separate letters and numbers with a "-"
+ * @param {string} input - The input to format
+ * @returns {string} - The formatted input
+ */
 function formatInput(input) {
     // Initialize variables to store the letters and numbers
     let letters = "";
@@ -123,7 +133,14 @@ function formatInput(input) {
     return letters + "-" + numbers;
 }
 
-// Checks if the input is a valid number
+
+/**
+ * Checks if a given value is a valid number within a given range
+ * @param {string | number} value - The value to check
+ * @param {number} [min=0] - The minimum value in the range (inclusive)
+ * @param {number} [max=10] - The maximum value in the range (inclusive)
+ * @returns {boolean} - Returns true if the value is a valid number within the range, false otherwise
+ */
 function isValidNumber(num) {
     //parse input to number if it's a string
     if(typeof num === "string"){
@@ -139,7 +156,11 @@ function isValidNumber(num) {
     return true;
 }
 
-// Deletes a channel after 15 seconds
+
+/**
+ * Deletes a given channel after 15 seconds
+ * @param {Discord.TextChannel} channel - The channel to delete
+ */
 async function deleteChannel(channel) {
     // send a message to the channel that it will be deleted in 15 seconds
     channel.send(`Channel deleting in 15 seconds...`);
@@ -151,6 +172,75 @@ async function deleteChannel(channel) {
     }, 15000);
 }
 
+
+/**
+ * Writes an essay on a given topic using OpenAI's text-davinci-003 model
+ * @param {string} inputValue - The topic of the essay
+ * @returns {Promise<string>} - A promise that resolves to the essay as a string
+ */
+async function writeEssay(inputValue){
+    // Import the OpenAI SDK
+    const { Configuration, OpenAIApi } = require("openai");
+
+    // Create a new configuration with the API key
+    const configuration = new Configuration({
+        apiKey: process.env.OPENAI_API,
+    });
+
+    // Create a new instance of the OpenAI API
+    const openai = new OpenAIApi(configuration);
+
+    // Send a request to the API to generate an essay on the given topic
+    const response = await openai.createCompletion({
+        model: "text-davinci-003",
+        prompt: "Write an essay about " + inputValue,
+        max_tokens: 1024,
+        temperature: 0.1,
+    });
+
+    // Log the essay to the console
+    console.log("Analysis complete. Results: " + response.data.choices[0].text);
+
+    // Return the essay
+    return response.data.choices[0].text;
+}
+
+
+/**
+ * Sends a long message to a channel by splitting it into chunks of 2000 characters
+ * @param {Discord.TextChannel} channel - The channel to send the message to
+ * @param {string} output - The long message to be sent
+ */
+function sendLongMessage(channel, output) {
+    const chunks = splitString(output, 2000); // Split the output into chunks of 2000 characters
+    // Iterate over each chunk and send it to the channel
+    for (const chunk of chunks) {
+      channel.send(chunk); // Send each chunk one by one
+    }
+}
+
+
+/**
+ * Splits a string into an array of chunks of a given length
+ * @param {string} string - The string to be split
+ * @param {number} length - The length of each chunk
+ * @returns {string[]} - An array of chunks
+ */
+function splitString(string, length) {
+    const chunks = [];
+    let index = 0;
+    // Iterate over the string and split it into chunks of the given length
+    while (index < string.length) {
+      chunks.push(string.slice(index, index + length));
+      index += length;
+    }
+  
+    return chunks;
+}
+
+
+exports.sendLongMessage = sendLongMessage;
+exports.writeEssay = writeEssay;
 exports.isValidNumber = isValidNumber;
 exports.formatInput = formatInput;
 exports.deleteChannel = deleteChannel;
