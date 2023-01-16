@@ -1,0 +1,18 @@
+Data Needed
+
+-List of every single prefix (eg. CS = computer science) in format:
+COMPSCI, Computer Science
+BUS, Business
+PHIL, Philosophy
+etc.
+
+-List of every single course code under each prefix in format:
+CS
+1026
+1027
+1028
+
+BUS
+1220
+2257
+
