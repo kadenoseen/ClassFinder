@@ -12,20 +12,20 @@ This bot is designed to assist users in managing their classes on a Discord serv
 ## Getting Started
 To get started, you will need to have [Node.js](https://nodejs.org/en/) and [npm](https://www.npmjs.com/) installed on your computer. You will also need to have a [Discord](https://discord.com/) account and create a bot on the [Discord Developer Portal](https://discord.com/developers/docs/intro).
 1. Clone the repository to your local machine
-```js
+```bash
 git clone https://github.com/your-username/discord-bot.git
 ```
 2. Install the necessary dependencies
-```js
+```bash
 npm install
 ```
 3. Create a .env file in the root directory of the project and add your Discord bot token and OpenAI API key
-```.js
+```env
 DISCORD_TOKEN=your-token-here
 OPENAI_API=your-api-key-here
 ```
 4. Start the bot
-```js
+```bash
 npm start
 ```
 
