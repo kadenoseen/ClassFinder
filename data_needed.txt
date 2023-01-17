@@ -7,11 +7,10 @@ PHIL, Philosophy
 etc.
 
 -List of every single course code under each prefix in format:
-CS
+COMPSCI
 1026
 1027
 1028
-
 BUS
 1220
 2257

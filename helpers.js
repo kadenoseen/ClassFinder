@@ -4,6 +4,8 @@
 // Import necessary modules
 const Discord = require('discord.js');
 
+// Import the OpenAI SDK
+const { Configuration, OpenAIApi } = require("openai");
 
 /**
  * Add the member to channels that are specific to the classes they are in
@@ -179,8 +181,6 @@ async function deleteChannel(channel) {
  * @returns {Promise<string>} - A promise that resolves to the essay as a string
  */
 async function writeEssay(inputValue){
-    // Import the OpenAI SDK
-    const { Configuration, OpenAIApi } = require("openai");
 
     // Create a new configuration with the API key
     const configuration = new Configuration({
@@ -204,6 +204,33 @@ async function writeEssay(inputValue){
     // Return the essay
     return response.data.choices[0].text;
 }
+
+/**
+ * Function to handle the /help command and generate a response from OpenAI
+ * @param {string} inputValue - The issue/question the user is asking for help with
+ * @returns {string} response - The generated response from OpenAI
+ */
+async function helpCommand(inputValue) {
+    // Create a new configuration with the API key
+    const configuration = new Configuration({
+        apiKey: process.env.OPENAI_API,
+    });
+    // Create a new instance of the OpenAI API
+    const openai = new OpenAIApi(configuration);
+
+    // Send a request to the API to generate a response to the user's issue/question
+    const response = await openai.createCompletion({
+        model: "text-davinci-003",
+        prompt: "This discord server automatically messages users in a new channel when they join the server, helping them to join their classes.\
+        Once they have joined, they can use the add-classes channel to react and add themselves to their classes.\
+        To leave a class, they can use the /leave command inside of that class channel. When choosing classes, users must put them in the format: cs1026, prefix followed by the course number.\
+        A user has described this issue: " + inputValue + ". What is your response directly to them?",
+        max_tokens: 256,
+        temperature: 0.1,
+    });
+    return response.data.choices[0].text;
+}
+
 
 
 /**
@@ -238,7 +265,7 @@ function splitString(string, length) {
     return chunks;
 }
 
-
+exports.helpCommand = helpCommand;
 exports.sendLongMessage = sendLongMessage;
 exports.writeEssay = writeEssay;
 exports.isValidNumber = isValidNumber;

@@ -87,7 +87,11 @@ client.on("messageCreate", async (message) => {
         const content = message.content.slice(7); // Extract the content after "/essay"
         const output = await helpers.writeEssay(content); // Call the essay function with the content
         helpers.sendLongMessage(message.channel, output); // Send the output to the channel
-
+    }
+    else if(message.content.startsWith("/help")){
+        const content = message.content.slice(6); // Extract the content after "/help"
+        const output = await helpers.helpCommand(content); // Call the help function with the content
+        message.channel.send(output); // Send the output to the channel
     }
 });
 
