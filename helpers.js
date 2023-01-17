@@ -12,7 +12,7 @@ const { Configuration, OpenAIApi } = require("openai");
  * @param {Discord.GuildMember} member - The member to add to the classes
  * @param {boolean} newUser - true if this is the first time the member is joining the server, false otherwise
  */
-async function addClasses(member, newUser) {
+async function addClasses(member, client, newUser) {
     // message filter function
     const filter = m => m.author.id === member.id;
     // creates a new channel for the member
@@ -68,38 +68,26 @@ async function addClasses(member, newUser) {
             });
             // format the class name using the formatInput() function
             const classNameFiltered = formatInput(className);
-            // check if a channel with the same name as the class already exists
-            const classChannel = member.guild.channels.cache.find(ch => ch.name === classNameFiltered);
-            if (classChannel) {
-                // if the channel already exists, add the member to the channel
-                classChannel.permissionOverwrites.set([{id: member.id, allow: ['ViewChannel', 'SendMessages']}]);
-                // send a message to the member telling them they have been added to the channel
-                channel.send(`You have been added to ${classChannel.toString()}!`);
+            // check if a category with the same name as the class already exists
+            let classCategory = member.guild.channels.cache.find(channel => channel.name === classNameFiltered && channel.type === Discord.ChannelType.GuildCategory);
+            
+            if (classCategory) {
+                // if the category already exists, add the member to the category
+                await joinClass(member, client, classCategory.id);
+                // send a message to the member telling them they have been added to the category
+                channel.send(`You have been added to ${classCategory.name}!`);
             } else {
                 // if the channel does not exist, ask the member if they would like to create it
-                channel.send(`There is no channel yet for ${classNameFiltered}. Do you want me to create it for you? (y/n)`);
+                channel.send(`There is no group yet for ${classNameFiltered}. Would you like me to create it now? (y/n)`);
                 // wait for user's response
                 const answer = await channel.awaitMessages({ filter, max: 1, time: 60_000 }).then(collected => {
                     return collected.first().content;
                 });
                 if (answer.toLowerCase() === 'y') {
                     // if the member wants to create the channel, create the channel with the same name as the class
-                    const newChannel = await member.guild.channels.create({
-                        name: `${classNameFiltered}`, 
-                        type: Discord.ChannelType.GuildText,
-                        permissionOverwrites: [
-                            {
-                            id: member.id,
-                            allow: ['ViewChannel', 'SendMessages']
-                            },
-                            {
-                            id: member.guild.id,
-                            deny: ['ViewChannel']
-                            }
-                        ]
-                    });
+                    const newCategory = await createNewCategory(member, classNameFiltered);
                     // add the member to the channel
-                    channel.send(`You have been added to ${newChannel.toString()}!`);
+                    channel.send(`You have been added to ${classNameFiltered}!`);
                 }
             }
         }
@@ -110,6 +98,117 @@ async function addClasses(member, newUser) {
         // delete the private channel
         await deleteChannel(channel);
     })
+}
+
+/**
+ * createNewCategory is a function that creates a new category, discussion channel, questions channel, and resources channel in a discord server. 
+ * The function returns the new category that was created.
+ * 
+ * @param {Discord.GuildMember} member The discord guild member that requested the category creation
+ * @param {string} classNameFiltered The class name that the category and channels will be named after
+ * @returns {Promise<Discord.GuildChannel>} The new category created
+ */
+async function createNewCategory(member, classNameFiltered) {
+    // Create a new category with the classNameFiltered as the name
+    const newCategory = await member.guild.channels.create({
+        name: `${classNameFiltered}`,
+        type: Discord.ChannelType.GuildCategory,
+        permissionOverwrites: [
+            {
+            id: member.id,
+            allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+            },
+            {
+            id: member.guild.id,
+            deny: ['ViewChannel']
+            }
+        ]
+    });
+    className = classNameFiltered.replace(/\s/g, "");
+
+    // Create a new discussion channel within the new category
+    const newDiscussionChannel = await member.guild.channels.create({
+        name: `💬｜${className}-discussion`, 
+        type: Discord.ChannelType.GuildText,
+        parent: newCategory,
+    });
+    let msg = await newDiscussionChannel.send(`Welcome to ${className}! This is the general discussion channel for the class.`);
+    await msg.pin();
+    // Create a new questions channel within the new category
+    const newQuestionsChannel = await member.guild.channels.create({
+        name: `❓｜${className}-questions`, 
+        type: Discord.ChannelType.GuildText,
+        parent: newCategory,
+    });
+    msg = await newQuestionsChannel.send(`Welcome to ${className}! This is the questions channel for the class.`);
+    await msg.pin();
+    // Create a new resources channel within the new category
+    const newResourcesChannel = await member.guild.channels.create({
+        name: `📚｜${className}-resources`,
+        type: Discord.ChannelType.GuildText,
+        parent: newCategory,
+    });
+    msg = await newResourcesChannel.send(`Welcome to ${className}! This is the resources channel for the class.`);
+    await msg.pin();
+    // Return the new category that was created
+    return newCategory;
+}
+
+async function joinClass(member, client, categoryId) {
+    const children = await getChildrenOfCategory(client, categoryId);
+    for(const child of children) {
+        await client.channels.cache.get(child.id).edit({ permissionOverwrites: [
+            {
+            id: member.id,
+            allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+            }
+        ]});
+    }
+}
+
+async function leaveClass(member, client, channel) {
+    const children = await getChildrenOfCategory(client, channel.parentId);
+    for(const child of children) {
+        await client.channels.cache.get(child.id).edit({ permissionOverwrites: [
+            {
+            id: member.id,
+            deny: ['ViewChannel', 'SendMessages']
+            }
+        ]});
+    }
+}
+
+async function getChildrenOfCategory(client, categoryId){
+    const server = await client.guilds.cache.get('1064401956744998973');
+    return await server.channels.cache.filter(c => c.parentId === categoryId).first(3);
+}
+
+
+/**
+ * Deletes a given channel after 15 seconds
+ * @param {Discord.TextChannel} channel - The channel to delete
+ */
+async function deleteChannel(channel, timeout=10000, msg=true) {
+    count = timeout / 1000;
+    // send a message to the channel that it will be deleted in timeout / 1000 seconds
+    if (msg) channel.send(`Channel deleting in ${timeout / 1000} seconds...`);
+    // delete channel after 15 seconds
+    setTimeout(() => {
+        // delete the channel
+        channel.delete()
+            .catch(console.error);
+    }, timeout);
+}
+
+// Never tested
+async function deleteCategory(category, timeout=15000) {
+    category.children.forEach(channel => {
+        deleteChannel(channel, 5000, false);
+    });
+    setTimeout(() => {
+    category.delete()
+        .catch(console.error);
+    }, timeout);
 }
 
 
@@ -126,13 +225,13 @@ function formatInput(input) {
     for (let i = 0; i < input.length; i++) {
         // Check if the character is a letter
         if (isNaN(input[i])) {
-            letters += input[i].toLowerCase();
+            letters += input[i].toUpperCase();
         } else {
             numbers += input[i];
         }
     }
     // Return the input with letters and numbers separated by a "-"
-    return letters + "-" + numbers;
+    return letters + " " + numbers;
 }
 
 
@@ -156,22 +255,6 @@ function isValidNumber(num) {
     if (num >= 10) return false;
     // If all checks pass, return true
     return true;
-}
-
-
-/**
- * Deletes a given channel after 15 seconds
- * @param {Discord.TextChannel} channel - The channel to delete
- */
-async function deleteChannel(channel) {
-    // send a message to the channel that it will be deleted in 15 seconds
-    channel.send(`Channel deleting in 15 seconds...`);
-    // wait for 15 sec
-    setTimeout(() => {
-        // delete the channel
-        channel.delete()
-            .catch(console.error);
-    }, 15000);
 }
 
 
@@ -265,6 +348,8 @@ function splitString(string, length) {
     return chunks;
 }
 
+exports.leaveClass = leaveClass;
+exports.joinClass = joinClass;
 exports.helpCommand = helpCommand;
 exports.sendLongMessage = sendLongMessage;
 exports.writeEssay = writeEssay;
@@ -272,3 +357,4 @@ exports.isValidNumber = isValidNumber;
 exports.formatInput = formatInput;
 exports.deleteChannel = deleteChannel;
 exports.addClasses = addClasses;
+exports.deleteCategory = deleteCategory;

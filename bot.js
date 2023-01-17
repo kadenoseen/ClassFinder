@@ -43,7 +43,7 @@ client.on('ready', async () => {
  */
 client.on('guildMemberAdd', async member => {
     //add classes to the member
-    await helpers.addClasses(member);
+    await helpers.addClasses(member, client);
 });
 
 
@@ -58,7 +58,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
         //find the member who reacted
         member = reaction.message.guild.members.cache.find(member => member.id === user.id);
         //add classes to the member
-        await helpers.addClasses(member, false);
+        await helpers.addClasses(member, client, false);
         //remove the reaction
         reaction.users.remove(member);
     }
@@ -72,15 +72,12 @@ client.on("messageReactionAdd", async (reaction, user) => {
 client.on("messageCreate", async (message) => {
     // Check if the message is the leave command
     if(message.content === "/leave"){
-        // Check if the message is not in a group channel
-        if(message.channel.parentId !== null) {
-            // exit if the message is not in a group channel
-            return;
-        }else{
+        // MUST ADD HANDLING FOR IF THE USER IS NOT IN A CLASS CHANNEL (check if discussion, questions, or resource in channel.name)
+        // Check if the user is in a class channel
+        if(message.channel.name.includes("discussion") || message.channel.name.includes("questions") || message.channel.name.includes("resources")){
             // delete the message after 0.5 sec
             setTimeout(() => message.delete(), 500);
-            // Remove the user permission to view and send messages in the channel
-            message.channel.permissionOverwrites.set([{id: message.author.id, deny: ['ViewChannel', 'SendMessages']}]);
+            helpers.leaveClass(message.member, client, message.channel);
         }
     }
     else if(message.content.startsWith("/essay")){
@@ -92,6 +89,11 @@ client.on("messageCreate", async (message) => {
         const content = message.content.slice(6); // Extract the content after "/help"
         const output = await helpers.helpCommand(content); // Call the help function with the content
         message.channel.send(output); // Send the output to the channel
+    }
+    // if message is /deleteCategory and author is admin
+    else if(message.content === "/deleteCategory" && message.member.roles.cache.some(role => role.name === 'Admin')){
+        helpers.deleteCategory(message.channel.parent);
+        //console.log(message.channel.parent);
     }
 });
 
