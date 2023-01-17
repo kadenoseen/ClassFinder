@@ -57,42 +57,66 @@ async function addClasses(member, client, newUser) {
             if(!isValidNumber(numClasses)) {
                 channel.send('Invalid input. Please enter a value from 0-10.');
             }
-        }    
+        }
+        let timedOut = false;
         // ask for each class the member is in
         for (let i = 1; i <= numClasses; i++) {
             // ask for the name of class number i
             channel.send(`What is the name of class number ${i}? Make sure it is in the format "cs1026"`);
             // wait for user's response and store the class name
             const className = await channel.awaitMessages({ filter, max: 1, time: 60_000 }).then(collected => {
-                return collected.first().content;
-            });
-            // format the class name using the formatInput() function
-            const classNameFiltered = formatInput(className);
-            // check if a category with the same name as the class already exists
-            let classCategory = member.guild.channels.cache.find(channel => channel.name === classNameFiltered && channel.type === Discord.ChannelType.GuildCategory);
-            
-            if (classCategory) {
-                // if the category already exists, add the member to the category
-                await joinClass(member, client, classCategory.id);
-                // send a message to the member telling them they have been added to the category
-                channel.send(`You have been added to ${classCategory.name}!`);
-            } else {
-                // if the channel does not exist, ask the member if they would like to create it
-                channel.send(`There is no group yet for ${classNameFiltered}. Would you like me to create it now? (y/n)`);
-                // wait for user's response
-                const answer = await channel.awaitMessages({ filter, max: 1, time: 60_000 }).then(collected => {
+                if(collected.size > 0){
                     return collected.first().content;
-                });
-                if (answer.toLowerCase() === 'y') {
-                    // if the member wants to create the channel, create the channel with the same name as the class
-                    const newCategory = await createNewCategory(member, classNameFiltered);
-                    // add the member to the channel
-                    channel.send(`You have been added to ${classNameFiltered}!`);
+                }else{
+                    return null;
+                }
+                
+            });
+            if(className){
+                // format the class name using the formatInput() function
+                const classNameFiltered = formatInput(className);
+                // check if a category with the same name as the class already exists
+                let classCategory = member.guild.channels.cache.find(channel => channel.name === classNameFiltered && channel.type === Discord.ChannelType.GuildCategory);
+                
+                if (classCategory) {
+                    // if the category already exists, add the member to the category
+                    await joinClass(member, client, classCategory.id);
+                    // send a message to the member telling them they have been added to the category
+                    channel.send(`You have been added to ${classCategory.name}!`);
+                } else {
+                    // if the channel does not exist, ask the member if they would like to create it
+                    channel.send(`There is no group yet for ${classNameFiltered}. Would you like me to create it now? (y/n)`);
+                    // wait for user's response
+                    const answer = await channel.awaitMessages({ filter, max: 1, time: 60_000 }).then(collected => {
+                        if(collected.size > 0){
+                            return collected.first().content;
+                        }else{
+                            return null;
+                        }
+                    });
+                    if (answer){
+                        if (answer.toLowerCase() === 'y') {
+                            // if the member wants to create the channel, create the channel with the same name as the class
+                            const newCategory = await createNewCategory(member, classNameFiltered);
+                            // add the member to the channel
+                            channel.send(`${classNameFiltered} has been created and you have been added!`);
+                        }
+                    }
+                    else{
+                        channel.send('No response received.');
+                        timedOut = true;
+                        break;
+                    }
                 }
             }
+            else {
+                channel.send('No response received.');
+                timedOut = true;
+                break;
+            }
         }
-        // if the member has joined at least 1 class, send a message telling them they have been added to all their classes
-        if (numClasses > 0) {
+        // if the member has joined at least 1 class and didn't timeout, send a message telling them they have been added to all their classes
+        if (numClasses > 0 && timedOut === false) {
             channel.send(`You have now been added to all of your classes!`);
         }
         // delete the private channel
@@ -154,9 +178,19 @@ async function createNewCategory(member, classNameFiltered) {
     return newCategory;
 }
 
+
+/**
+ * Function to add a user to a class channel and give them permission to view messages, send messages, and read message history
+ * @param {Discord.GuildMember} member - The member to add to the class channel
+ * @param {Discord.Client} client - The client object for the bot
+ * @param {string} categoryId - The ID of the class category channel
+ */
 async function joinClass(member, client, categoryId) {
+    // Get the children of the category channel
     const children = await getChildrenOfCategory(client, categoryId);
+    // Iterate through each child channel
     for(const child of children) {
+        // Edit the permissionOverwrites of the child channel to give the member permission to view, send, and read message history
         await client.channels.cache.get(child.id).edit({ permissionOverwrites: [
             {
             id: member.id,
@@ -166,20 +200,39 @@ async function joinClass(member, client, categoryId) {
     }
 }
 
+
+/**
+ * Removes a user's permissions to view, send messages, and read message history in all the child channels of a given category channel.
+ * @param {GuildMember} member - The Discord.js GuildMember object of the user to remove from the class.
+ * @param {Client} client - The Discord.js Client object used to interact with the Discord API.
+ * @param {GuildChannel} channel - The Discord.js GuildChannel object of the category channel that the user is being removed from.
+ */
 async function leaveClass(member, client, channel) {
+    // Get the child channels of the given category channel
     const children = await getChildrenOfCategory(client, channel.parentId);
+    // Iterate through each child channel
     for(const child of children) {
+        // Edit the channel's permissionOverwrites to deny the user ViewChannel, SendMessages, and ReadMessageHistory permissions
         await client.channels.cache.get(child.id).edit({ permissionOverwrites: [
             {
             id: member.id,
-            deny: ['ViewChannel', 'SendMessages']
+            deny: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
             }
         ]});
     }
 }
 
-async function getChildrenOfCategory(client, categoryId){
+/**
+ * Function that gets the children of a given category in a discord server
+ * 
+ * @param {Object} client The discord.js client object
+ * @param {String} categoryId The id of the category to get the children from
+ * @return {Array} An array of channel objects that are the children of the given category
+ */
+async function getChildrenOfCategory(client, categoryId) {
+    // Get the server object
     const server = await client.guilds.cache.get('1064401956744998973');
+    // Use filter() and first() to return an array containing the first 3 children of the category
     return await server.channels.cache.filter(c => c.parentId === categoryId).first(3);
 }
 
@@ -200,16 +253,26 @@ async function deleteChannel(channel, timeout=10000, msg=true) {
     }, timeout);
 }
 
-// Never tested
-async function deleteCategory(category, timeout=15000) {
-    category.children.forEach(channel => {
-        deleteChannel(channel, 5000, false);
-    });
-    setTimeout(() => {
-    category.delete()
-        .catch(console.error);
-    }, timeout);
+/**
+ * Deletes the given category channel and all its child channels.
+ * @param {Discord.TextChannel} channel - The category channel to be deleted
+ * @param {Discord.Client} client - The Discord client instance
+ * @param {number} timeout - The time in milliseconds before deletion (default 5000)
+ */
+async function deleteCategory(channel, client, timeout=5000) {
+    // Get the child channels of the given category channel
+    const children = await getChildrenOfCategory(client, channel.parentId);
+    // Iterate through each child channel
+    for(const child of children) {
+        // Delete the channel
+        c = await client.channels.cache.get(child.id);
+        await deleteChannel(c, timeout);
+    }
+    // Delete the category channel
+    const cat = await client.channels.cache.get(channel.parentId);
+    await deleteChannel(cat, timeout, false);
 }
+
 
 
 /**

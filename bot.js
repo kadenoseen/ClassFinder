@@ -72,7 +72,6 @@ client.on("messageReactionAdd", async (reaction, user) => {
 client.on("messageCreate", async (message) => {
     // Check if the message is the leave command
     if(message.content === "/leave"){
-        // MUST ADD HANDLING FOR IF THE USER IS NOT IN A CLASS CHANNEL (check if discussion, questions, or resource in channel.name)
         // Check if the user is in a class channel
         if(message.channel.name.includes("discussion") || message.channel.name.includes("questions") || message.channel.name.includes("resources")){
             // delete the message after 0.5 sec
@@ -92,11 +91,20 @@ client.on("messageCreate", async (message) => {
     }
     // if message is /deleteCategory and author is admin
     else if(message.content === "/deleteCategory" && message.member.roles.cache.some(role => role.name === 'Admin')){
-        helpers.deleteCategory(message.channel.parent);
-        //console.log(message.channel.parent);
+        if(message.channel.name.includes("discussion") || message.channel.name.includes("questions") || message.channel.name.includes("resources")){
+            helpers.deleteCategory(message.channel, client);
+        }
     }
 });
 
+/**
+ * Event listener for when an error is thrown
+ * @param {Error} err - The error that was thrown
+ */
+process.on('uncaughtException', function (err) {
+    console.error((new Date).toUTCString() + ' uncaughtException:', err.message)
+    console.error(err.stack)
+});
 
 // Logs in the bot
 client.login(process.env.BOT_API);
