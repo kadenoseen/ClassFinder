@@ -44,7 +44,7 @@ async function addClasses(member, client, newUser) {
         // Keep looping until a valid number is received
         while(!isValidNumber(numClasses)) {
             // Wait for the user to send a message that passes the filter function, which only allows messages from the current user
-            numClasses = await channel.awaitMessages({filter, max: 1, time: 60_000}).then(collected => {
+            numClasses = await channel.awaitMessages({filter, max: 1, time: 120_000}).then(collected => {
                 // return the content of the first message that passed the filter
                 return collected.first().content;
             }).catch(async err => {
@@ -158,14 +158,7 @@ async function createNewCategory(member, classNameFiltered) {
     });
     let msg = await newDiscussionChannel.send(`Welcome to ${className}! This is the general discussion channel for the class.`);
     await msg.pin();
-    // Create a new questions channel within the new category
-    const newQuestionsChannel = await member.guild.channels.create({
-        name: `❓｜${className}-questions`, 
-        type: Discord.ChannelType.GuildText,
-        parent: newCategory,
-    });
-    msg = await newQuestionsChannel.send(`Welcome to ${className}! This is the questions channel for the class.`);
-    await msg.pin();
+
     // Create a new resources channel within the new category
     const newResourcesChannel = await member.guild.channels.create({
         name: `📚｜${className}-resources`,
@@ -174,6 +167,12 @@ async function createNewCategory(member, classNameFiltered) {
     });
     msg = await newResourcesChannel.send(`Welcome to ${className}! This is the resources channel for the class.`);
     await msg.pin();
+    // Create a new questions forum channel within the new category
+    const newQuestionsChannel = await member.guild.channels.create({
+        name: `❓｜${className}-questions`, 
+        type: Discord.ChannelType.GuildForum,
+        parent: newCategory,
+    });
     // Return the new category that was created
     return newCategory;
 }
@@ -190,13 +189,8 @@ async function joinClass(member, client, categoryId) {
     const children = await getChildrenOfCategory(client, categoryId);
     // Iterate through each child channel
     for(const child of children) {
-        // Edit the permissionOverwrites of the child channel to give the member permission to view, send, and read message history
-        await client.channels.cache.get(child.id).edit({ permissionOverwrites: [
-            {
-            id: member.id,
-            allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
-            }
-        ]});
+        const chan = client.channels.cache.get(child.id);
+        chan.permissionOverwrites.edit(member.id, {ViewChannel: true, SendMessages: true, ReadMessageHistory: true});
     }
 }
 
@@ -257,16 +251,16 @@ async function deleteChannel(channel, timeout=10000, msg=true) {
  * Deletes the given category channel and all its child channels.
  * @param {Discord.TextChannel} channel - The category channel to be deleted
  * @param {Discord.Client} client - The Discord client instance
- * @param {number} timeout - The time in milliseconds before deletion (default 5000)
+ * @param {number} timeout - The time in milliseconds before deletion (default 2000)
  */
-async function deleteCategory(channel, client, timeout=5000) {
+async function deleteCategory(channel, client, timeout=2000) {
     // Get the child channels of the given category channel
     const children = await getChildrenOfCategory(client, channel.parentId);
     // Iterate through each child channel
     for(const child of children) {
         // Delete the channel
         c = await client.channels.cache.get(child.id);
-        await deleteChannel(c, timeout);
+        await deleteChannel(c, timeout, false);
     }
     // Delete the category channel
     const cat = await client.channels.cache.get(channel.parentId);
@@ -377,6 +371,80 @@ async function helpCommand(inputValue) {
     return response.data.choices[0].text;
 }
 
+/**
+ * Function to handle the tickets and generate a response from OpenAI
+ * @param {string} inputValue - The updated message feed where the user is asking for help with
+ * @returns {string} response - The generated response from OpenAI
+ */
+async function helpTicket(inputValue) {
+    // Create a new configuration with the API key
+    const configuration = new Configuration({
+        apiKey: process.env.OPENAI_API,
+    });
+    // Create a new instance of the OpenAI API
+    const openai = new OpenAIApi(configuration);
+
+    // Send a request to the API to generate a response to the user's issue/question
+    const response = await openai.createCompletion({
+        model: "text-davinci-003",
+        prompt: "This discord server automatically messages users in a new channel when they join the server, helping them to join their classes.\
+        Once they have joined, they can use the add-classes channel to react and add themselves to their classes.\
+        To leave a class, they can use the /leave command inside of that class channel. When choosing classes, users must put them in the format: cs1026, prefix followed by the course number.\
+        You are a bot that helps users (as concise as possible) with anything related to this discord server only. The current help chat in list format with the user is: " + inputValue + ". Provide the next response to the user.",
+        max_tokens: 256,
+        temperature: 0.1,
+    });
+    return response.data.choices[0].text;
+}
+
+/**
+ * Function to handle a help ticket in a discord channel
+ * @param {Discord.TextChannel} channel - The discord channel where the help ticket will take place
+ * @param {Boolean} start - Flag to determine if the function is being called to start a new ticket or continue an existing one
+ * @param {Array} helpChat - Array containing the previous messages of the help ticket
+ */
+
+async function handleHelpTicket(channel, start=false, helpChat=[]) {
+    // If this is the first call to the function, set a timeout for 300ms and send the initial greeting message
+    if(start){
+        await new Promise(resolve => setTimeout(resolve, 300));
+        await channel.send("Hello! How can I help you today? To get help from a mod instead, type /mod. To close the ticket, type /close or click the close button");
+        helpChat = ["Hello! How can I help you today? To get help from a mod instead, type /mod. To close the ticket, type /close or click the close button."]
+    }
+    // Filter to only accept messages from users with the role "Student"
+    const filter = m => m.member.roles.cache.some(r => r.name === "Student");
+    // Await the next message from the user and store it in the variable "answer"
+    const answer = await channel.awaitMessages({ filter, max: 1, time: 60_000 }).then(collected => {
+        //If there is a message, return the message's content, otherwise return null
+        if(collected.size > 0){
+            return collected.first().content;
+        }else{
+            return null;
+        }
+    });
+    //If no message is received, send a message and close the ticket
+    if(answer === null){
+        channel.send("No response received. Closing ticket...");
+        deleteChannel(channel, 5_000, false);
+    }
+    //If the user inputs "/mod", send a message saying an admin will be in contact
+    else if(answer.includes("/mod")){
+        channel.send("An @Admin will be in contact with you shortly.");
+    }
+    //If the user inputs "/close", send a message saying the ticket is closing and close the ticket
+    else if(answer.includes("/close")){
+        channel.send("Closing ticket...");
+        deleteChannel(channel, 5_000, false);
+    }
+    // If none of the above conditions are met, pass the user's message and previous chat to a function to generate a response, send the response, and call handleHelpTicket again with the updated chat log
+    else {
+        helpChat.push(answer);
+        let response = await helpTicket(helpChat);
+        await sendLongMessage(channel, response);
+        helpChat.push(response);
+        handleHelpTicket(channel, false, helpChat);
+    }
+}
 
 
 /**
@@ -421,3 +489,4 @@ exports.formatInput = formatInput;
 exports.deleteChannel = deleteChannel;
 exports.addClasses = addClasses;
 exports.deleteCategory = deleteCategory;
+exports.handleHelpTicket = handleHelpTicket;

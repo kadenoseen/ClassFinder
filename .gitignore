@@ -1,2 +1,7 @@
 .env
 node_modules
+app.yaml
+.gcloudignore
+data_needed.txt
+prompts.jsonl
+.gitignore
